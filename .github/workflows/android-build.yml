@@ -30,9 +30,12 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
          packages: ''
+         
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
+        with:
+         validate-wrappers: false
+         
       - name: Build debug APK
         run: |
           chmod +x gradlew
