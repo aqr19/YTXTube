@@ -15,16 +15,22 @@ android {
         versionName = "2.1.0"
     }
 
-    signingConfigs {
-        getByName("debug") {
-            // v1 matters on some Android 7/8 Samsung installers; v2 keeps modern
-            // devices happy. Signing with both makes the same APK installable on
-            // the widest range of devices.
-            enableV1Signing = true
-            enableV2Signing = true
-            enableV3Signing = true
-        }
+    
+signingConfigs {
+    getByName("release") {
+        enableV1Signing = true
+        enableV2Signing = true
+        enableV3Signing = true
     }
+
+    create("release") {
+        storeFile = file(System.getenv("SIGNING_STORE_FILE") ?: "release-key.jks")
+        storePassword = System.getenv("SIGNING_STORE_PASSWORD") ?: ""
+        keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: ""
+        keyPassword = System.getenv("SIGNING_KEY_PASSWORD") ?: ""
+    }
+}
+
 
     buildTypes {
         release {
