@@ -1643,46 +1643,54 @@ object InnerTube {
 
     private suspend fun loadAnonymousInfiniteHomeFeed(next: String?): FeedPage = kotlinx.coroutines.coroutineScope {
         // Initial page: deliver a dynamic, diverse, and unique mix each time
-        if (next == null) {
-            val randomTopics = POPULAR_TOPICS.shuffled().take(3)
-            val trendingDeferred = async { runCatching { YouTube.trending(null) }.getOrNull() }
-            val topic1Deferred = async { runCatching { YouTube.search(randomTopics[0]) }.getOrDefault(emptyList()) }
-            val topic2Deferred = async { runCatching { YouTube.search(randomTopics[1]) }.getOrDefault(emptyList()) }
-            val topic3Deferred = async { runCatching { YouTube.search(randomTopics[2]) }.getOrDefault(emptyList()) }
+                if (next == null) {
+            val randomTopic = POPULAR_TOPICS.random()
 
-            val trendingVideos = trendingDeferred.await()?.videos.orEmpty()
-            val list1 = topic1Deferred.await()
-            val list2 = topic2Deferred.await()
-            val list3 = topic3Deferred.await()
+            // Load trending first to show videos as quickly as possible
+            val trending = runCatching {
+                YouTube.trending(null)
+            }.getOrNull()
 
-            val combined = ArrayList<VideoItem>()
-            val maxLen = maxOf(trendingVideos.size, list1.size, list2.size, list3.size)
-            for (i in 0 until maxLen) {
-                if (i < trendingVideos.size) combined.add(trendingVideos[i])
-                if (i < list1.size) combined.add(list1[i])
-                if (i < list2.size) combined.add(list2[i])
-                if (i < list3.size) combined.add(list3[i])
+            // Fall back to one search only if trending is unavailable or empty
+            val initialVideos = trending?.videos.orEmpty().ifEmpty {
+                runCatching {
+                    YouTube.search(randomTopic)
+                }.getOrDefault(emptyList())
             }
 
-            val unique = combined.distinctBy { it.id }
+            val unique = initialVideos.distinctBy { it.id }
+
             val fresh = synchronized(anonSeenVideoIds) {
                 unique.filter { it.id !in anonSeenVideoIds }
             }
+
             val result = if (fresh.size >= 12) fresh else unique
 
             synchronized(anonSeenVideoIds) {
                 result.forEach { anonSeenVideoIds.add(it.id) }
+
                 if (anonSeenVideoIds.size > 800) {
                     val excess = anonSeenVideoIds.size - 500
                     val iter = anonSeenVideoIds.iterator()
-                    repeat(excess) { if (iter.hasNext()) { iter.next(); iter.remove() } }
+                    repeat(excess) {
+                        if (iter.hasNext()) {
+                            iter.next()
+                            iter.remove()
+                        }
+                    }
                 }
             }
 
-            val nextIdx = (0 until POPULAR_TOPICS.size).random()
-            return@coroutineScope FeedPage(result, "anon_feed:$nextIdx:start")
-        }
+    val nextToken = if (
+        !trending?.next.isNullOrBlank() && trending.videos.isNotEmpty()
+    ) {
+        "anon_feed:trend:${trending.next}"
+    } else {
+        "anon_feed:${POPULAR_TOPICS.indexOf(randomTopic)}:start"
+    }
 
+    return@coroutineScope FeedPage(result, nextToken)
+}
         // Continuing pagination token: "anon_feed:<topicIndexOrTrend>:<pageUrlOrMarker>"
         val parts = next.removePrefix("anon_feed:").split(":", limit = 2)
         val categoryOrIdx = parts.getOrNull(0) ?: "0"
